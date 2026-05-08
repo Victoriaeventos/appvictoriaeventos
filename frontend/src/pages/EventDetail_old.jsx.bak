@@ -1,0 +1,866 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
+import { 
+  ArrowLeft, Plus, CheckCircle2, Circle, Clock, 
+  Users, DollarSign, Package, MessageSquare, 
+  Image as ImageIcon, Sparkles, Trash2, Edit, Send
+} from 'lucide-react';
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
+export default function EventDetail({ user }) {
+  const { eventId } = useParams();
+  const navigate = useNavigate();
+  const [event, setEvent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // States para módulos
+  const [tasks, setTasks] = useState([]);
+  const [guests, setGuests] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [budgetItems, setBudgetItems] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [galleries, setGalleries] = useState([]);
+  const [decorDecisions, setDecorDecisions] = useState([]);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    fetchEventData();
+  }, [eventId]);
+
+  const fetchEventData = async () => {
+    try {
+      const [eventRes, tasksRes, guestsRes, suppliersRes, budgetRes, notesRes, galleryRes, decorRes, statsRes] = await Promise.all([
+        axios.get(`${API}/events/${eventId}`),
+        axios.get(`${API}/tasks/${eventId}`),
+        axios.get(`${API}/guests/${eventId}`),
+        axios.get(`${API}/suppliers/${eventId}`),
+        axios.get(`${API}/budget/${eventId}`),
+        axios.get(`${API}/notes/${eventId}`),
+        axios.get(`${API}/gallery/${eventId}`),
+        axios.get(`${API}/decor/${eventId}`),
+        axios.get(`${API}/stats/${eventId}`)
+      ]);
+
+      setEvent(eventRes.data);
+      setTasks(tasksRes.data);
+      setGuests(guestsRes.data);
+      setSuppliers(suppliersRes.data);
+      setBudgetItems(budgetRes.data);
+      setNotes(notesRes.data);
+      setGalleries(galleryRes.data);
+      setDecorDecisions(decorRes.data);
+      setStats(statsRes.data);
+    } catch (error) {
+      toast.error('Error al cargar el evento');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============= TASKS =============
+  const TasksModule = () => {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [newTask, setNewTask] = useState({
+      title: '', category: '', due_date: '', responsible: '', status: 'pending', event_id: eventId
+    });
+
+    const handleCreate = async (e) => {
+      e.preventDefault();
+      try {
+        await axios.post(`${API}/tasks`, newTask);
+        toast.success('Tarea creada');
+        setDialogOpen(false);
+        setNewTask({ title: '', category: '', due_date: '', responsible: '', status: 'pending', event_id: eventId });
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error al crear tarea');
+      }
+    };
+
+    const handleStatusChange = async (taskId, status) => {
+      const task = tasks.find(t => t.id === taskId);
+      try {
+        await axios.put(`${API}/tasks/${taskId}`, { ...task, status });
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error al actualizar');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-playfair font-bold">Checklist de Tareas</h3>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="task-add-button">
+                <Plus className="mr-2 h-4 w-4" /> Nueva Tarea
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-playfair">Crear Tarea</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <Label>Título</Label>
+                  <Input value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} required />
+                </div>
+                <div>
+                  <Label>Categoría</Label>
+                  <Input value={newTask.category} onChange={(e) => setNewTask({...newTask, category: e.target.value})} required placeholder="Ej: Decoración, Catering" />
+                </div>
+                <div>
+                  <Label>Fecha límite</Label>
+                  <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask({...newTask, due_date: e.target.value})} required />
+                </div>
+                <div>
+                  <Label>Responsable</Label>
+                  <Input value={newTask.responsible} onChange={(e) => setNewTask({...newTask, responsible: e.target.value})} required />
+                </div>
+                <Button type="submit" className="w-full bg-[#D4AF37] hover:bg-[#C9A961]">Crear</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="space-y-3" data-testid="tasks-list">
+          {tasks.map((task) => (
+            <Card key={task.id} className="hover:shadow-md transition-shadow" data-testid={`task-item-${task.id}`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3 flex-1">
+                    <button onClick={() => handleStatusChange(task.id, task.status === 'completed' ? 'pending' : 'completed')} className="mt-1">
+                      {task.status === 'completed' ? (
+                        <CheckCircle2 className="h-5 w-5 text-[#D4AF37]" />
+                      ) : (
+                        <Circle className="h-5 w-5 text-gray-400" />
+                      )}
+                    </button>
+                    <div className="flex-1">
+                      <h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : ''}`}>
+                        {task.title}
+                      </h4>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {task.category} • {task.responsible}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Fecha límite: {new Date(task.due_date).toLocaleDateString('es-ES')}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={task.status === 'completed' ? 'default' : 'secondary'}>
+                    {task.status === 'completed' ? 'Completada' : task.status === 'in_progress' ? 'En progreso' : 'Pendiente'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============= GUESTS =============
+  const GuestsModule = () => {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [newGuest, setNewGuest] = useState({
+      name: '', rsvp: 'pending', companions_count: 0, allergies: '', event_id: eventId
+    });
+
+    const handleCreate = async (e) => {
+      e.preventDefault();
+      try {
+        await axios.post(`${API}/guests`, newGuest);
+        toast.success('Invitado añadido');
+        setDialogOpen(false);
+        setNewGuest({ name: '', rsvp: 'pending', companions_count: 0, allergies: '', event_id: eventId });
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-playfair font-bold">Lista de Invitados</h3>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="guest-add-button">
+                <Plus className="mr-2 h-4 w-4" /> Nuevo Invitado
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-playfair">Añadir Invitado</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <Label>Nombre</Label>
+                  <Input value={newGuest.name} onChange={(e) => setNewGuest({...newGuest, name: e.target.value})} required />
+                </div>
+                <div>
+                  <Label>RSVP</Label>
+                  <Select value={newGuest.rsvp} onValueChange={(v) => setNewGuest({...newGuest, rsvp: v})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendiente</SelectItem>
+                      <SelectItem value="confirmed">Confirmado</SelectItem>
+                      <SelectItem value="declined">No puede asistir</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Número de acompañantes</Label>
+                  <Input type="number" min="0" value={newGuest.companions_count} onChange={(e) => setNewGuest({...newGuest, companions_count: parseInt(e.target.value)})} />
+                </div>
+                <div>
+                  <Label>Alergias</Label>
+                  <Textarea value={newGuest.allergies} onChange={(e) => setNewGuest({...newGuest, allergies: e.target.value})} />
+                </div>
+                <Button type="submit" className="w-full bg-[#D4AF37] hover:bg-[#C9A961]">Añadir</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {stats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Total Invitados</p>
+                <p className="text-2xl font-bold text-[#D4AF37]">{stats.guests.total}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Confirmados</p>
+                <p className="text-2xl font-bold text-green-600">{stats.guests.confirmed}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Pendientes</p>
+                <p className="text-2xl font-bold text-orange-600">{stats.guests.pending}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Total Asistentes</p>
+                <p className="text-2xl font-bold text-[#D4AF37]">{stats.guests.total_attendees}</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="space-y-3" data-testid="guests-list">
+          {guests.map((guest) => (
+            <Card key={guest.id} data-testid={`guest-item-${guest.id}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium">{guest.name}</h4>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Acompañantes: {guest.companions_count}
+                    </p>
+                    {guest.allergies && (
+                      <p className="text-sm text-orange-600 mt-1">
+                        Alergias: {guest.allergies}
+                      </p>
+                    )}
+                  </div>
+                  <Badge variant={guest.rsvp === 'confirmed' ? 'default' : guest.rsvp === 'declined' ? 'destructive' : 'secondary'}>
+                    {guest.rsvp === 'confirmed' ? 'Confirmado' : guest.rsvp === 'declined' ? 'No asiste' : 'Pendiente'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============= BUDGET =============
+  const BudgetModule = () => {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [newItem, setNewItem] = useState({
+      category: '', description: '', estimated_amount: 0, paid_amount: 0, status: 'pending', event_id: eventId
+    });
+
+    const handleCreate = async (e) => {
+      e.preventDefault();
+      try {
+        await axios.post(`${API}/budget`, newItem);
+        toast.success('Partida añadida');
+        setDialogOpen(false);
+        setNewItem({ category: '', description: '', estimated_amount: 0, paid_amount: 0, status: 'pending', event_id: eventId });
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-playfair font-bold">Presupuesto</h3>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="budget-add-button">
+                <Plus className="mr-2 h-4 w-4" /> Nueva Partida
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-playfair">Nueva Partida</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <Label>Categoría</Label>
+                  <Input value={newItem.category} onChange={(e) => setNewItem({...newItem, category: e.target.value})} required placeholder="Ej: Catering, Fotografía" />
+                </div>
+                <div>
+                  <Label>Descripción</Label>
+                  <Input value={newItem.description} onChange={(e) => setNewItem({...newItem, description: e.target.value})} required />
+                </div>
+                <div>
+                  <Label>Presupuesto estimado (€)</Label>
+                  <Input type="number" min="0" step="0.01" value={newItem.estimated_amount} onChange={(e) => setNewItem({...newItem, estimated_amount: parseFloat(e.target.value)})} required />
+                </div>
+                <div>
+                  <Label>Importe pagado (€)</Label>
+                  <Input type="number" min="0" step="0.01" value={newItem.paid_amount} onChange={(e) => setNewItem({...newItem, paid_amount: parseFloat(e.target.value)})} />
+                </div>
+                <Button type="submit" className="w-full bg-[#D4AF37] hover:bg-[#C9A961]">Añadir</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Presupuesto Total</p>
+                <p className="text-2xl font-bold text-[#D4AF37]">{stats.budget.total_estimated.toFixed(2)}€</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Pagado</p>
+                <p className="text-2xl font-bold text-green-600">{stats.budget.total_paid.toFixed(2)}€</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">Pendiente</p>
+                <p className="text-2xl font-bold text-orange-600">{stats.budget.remaining.toFixed(2)}€</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div className="space-y-3" data-testid="budget-list">
+          {budgetItems.map((item) => (
+            <Card key={item.id} data-testid={`budget-item-${item.id}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h4 className="font-medium">{item.category}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+                    <div className="flex gap-4 mt-2 text-sm">
+                      <span>Presupuesto: <strong>{item.estimated_amount.toFixed(2)}€</strong></span>
+                      <span>Pagado: <strong className="text-green-600">{item.paid_amount.toFixed(2)}€</strong></span>
+                      <span>Pendiente: <strong className="text-orange-600">{(item.estimated_amount - item.paid_amount).toFixed(2)}€</strong></span>
+                    </div>
+                  </div>
+                  <Badge variant={item.status === 'paid' ? 'default' : 'secondary'}>
+                    {item.status === 'paid' ? 'Pagado' : item.status === 'partial' ? 'Parcial' : 'Pendiente'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============= SUPPLIERS =============
+  const SuppliersModule = () => {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [newSupplier, setNewSupplier] = useState({
+      name: '', service_type: '', contact: '', booking_status: 'pending', notes: '', event_id: eventId
+    });
+
+    const handleCreate = async (e) => {
+      e.preventDefault();
+      try {
+        await axios.post(`${API}/suppliers`, newSupplier);
+        toast.success('Proveedor añadido');
+        setDialogOpen(false);
+        setNewSupplier({ name: '', service_type: '', contact: '', booking_status: 'pending', notes: '', event_id: eventId });
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-playfair font-bold">Proveedores</h3>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="supplier-add-button">
+                <Plus className="mr-2 h-4 w-4" /> Nuevo Proveedor
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-playfair">Añadir Proveedor</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <Label>Nombre</Label>
+                  <Input value={newSupplier.name} onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})} required />
+                </div>
+                <div>
+                  <Label>Tipo de servicio</Label>
+                  <Input value={newSupplier.service_type} onChange={(e) => setNewSupplier({...newSupplier, service_type: e.target.value})} required placeholder="Ej: Fotografía, Catering" />
+                </div>
+                <div>
+                  <Label>Contacto</Label>
+                  <Input value={newSupplier.contact} onChange={(e) => setNewSupplier({...newSupplier, contact: e.target.value})} required placeholder="Email o teléfono" />
+                </div>
+                <div>
+                  <Label>Notas</Label>
+                  <Textarea value={newSupplier.notes} onChange={(e) => setNewSupplier({...newSupplier, notes: e.target.value})} />
+                </div>
+                <Button type="submit" className="w-full bg-[#D4AF37] hover:bg-[#C9A961]">Añadir</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="space-y-3" data-testid="suppliers-list">
+          {suppliers.map((supplier) => (
+            <Card key={supplier.id} data-testid={`supplier-item-${supplier.id}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium">{supplier.name}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{supplier.service_type}</p>
+                    <p className="text-sm text-gray-500 mt-1">Contacto: {supplier.contact}</p>
+                    {supplier.notes && (
+                      <p className="text-sm text-gray-600 mt-2">{supplier.notes}</p>
+                    )}
+                  </div>
+                  <Badge variant={supplier.booking_status === 'confirmed' ? 'default' : supplier.booking_status === 'cancelled' ? 'destructive' : 'secondary'}>
+                    {supplier.booking_status === 'confirmed' ? 'Confirmado' : supplier.booking_status === 'cancelled' ? 'Cancelado' : 'Pendiente'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============= NOTES =============
+  const NotesModule = () => {
+    const [newNote, setNewNote] = useState('');
+
+    const handleCreate = async (e) => {
+      e.preventDefault();
+      if (!newNote.trim()) return;
+
+      try {
+        await axios.post(`${API}/notes`, { content: newNote, event_id: eventId });
+        toast.success('Nota añadida');
+        setNewNote('');
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <h3 className="text-xl font-playfair font-bold">Comunicación</h3>
+
+        <form onSubmit={handleCreate} className="flex gap-2">
+          <Input
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            placeholder="Escribe un mensaje..."
+            className="flex-1"
+            data-testid="note-input"
+          />
+          <Button type="submit" className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="note-send-button">
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+
+        <div className="space-y-3" data-testid="notes-list">
+          {notes.map((note) => (
+            <Card key={note.id} data-testid={`note-item-${note.id}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-[#D4AF37]">{note.author_name}</p>
+                    <p className="text-gray-700 mt-2">{note.content}</p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {new Date(note.created_at).toLocaleString('es-ES')}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============= GALLERY =============
+  const GalleryModule = () => {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [prompt, setPrompt] = useState('');
+    const [generating, setGenerating] = useState(false);
+
+    const handleGenerate = async (e) => {
+      e.preventDefault();
+      setGenerating(true);
+
+      try {
+        await axios.post(`${API}/gallery/generate`, { generated_prompt: prompt, event_id: eventId });
+        toast.success('Imagen generada correctamente');
+        setDialogOpen(false);
+        setPrompt('');
+        fetchEventData();
+      } catch (error) {
+        toast.error(error.response?.data?.detail || 'Error al generar imagen');
+      } finally {
+        setGenerating(false);
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-playfair font-bold">Galería de Inspiración</h3>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="gallery-generate-button">
+                <Sparkles className="mr-2 h-4 w-4" /> Generar con IA
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-playfair">Generar Imagen con IA</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleGenerate} className="space-y-4">
+                <div>
+                  <Label>Describe la imagen que quieres generar</Label>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    required
+                    placeholder="Ej: Una mesa elegante con decoración floral en tonos beige y dorado, velas, copas de cristal..."
+                    rows={4}
+                  />
+                </div>
+                <Button type="submit" disabled={generating} className="w-full bg-[#D4AF37] hover:bg-[#C9A961]">
+                  {generating ? 'Generando... (puede tardar 1 minuto)' : 'Generar Imagen'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="gallery-list">
+          {galleries.map((gallery) => (
+            <Card key={gallery.id} className="overflow-hidden" data-testid={`gallery-item-${gallery.id}`}>
+              <img
+                src={`data:image/png;base64,${gallery.image_base64}`}
+                alt={gallery.generated_prompt}
+                className="w-full h-64 object-cover"
+              />
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-600">{gallery.generated_prompt}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ============= DECOR =============
+  const DecorModule = () => {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [newDecor, setNewDecor] = useState({
+      item_name: '', status: 'to_decide', notes: '', event_id: eventId
+    });
+
+    const handleCreate = async (e) => {
+      e.preventDefault();
+      try {
+        await axios.post(`${API}/decor`, newDecor);
+        toast.success('Decisión añadida');
+        setDialogOpen(false);
+        setNewDecor({ item_name: '', status: 'to_decide', notes: '', event_id: eventId });
+        fetchEventData();
+      } catch (error) {
+        toast.error('Error');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-playfair font-bold">Decisiones Decorativas</h3>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-[#D4AF37] hover:bg-[#C9A961]" data-testid="decor-add-button">
+                <Plus className="mr-2 h-4 w-4" /> Nueva Decisión
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="font-playfair">Nueva Decisión</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div>
+                  <Label>Elemento decorativo</Label>
+                  <Input value={newDecor.item_name} onChange={(e) => setNewDecor({...newDecor, item_name: e.target.value})} required placeholder="Ej: Color de manteles, Centro de mesa" />
+                </div>
+                <div>
+                  <Label>Estado</Label>
+                  <Select value={newDecor.status} onValueChange={(v) => setNewDecor({...newDecor, status: v})}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="to_decide">Por decidir</SelectItem>
+                      <SelectItem value="chosen">Elegido</SelectItem>
+                      <SelectItem value="ordered">Encargado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Notas</Label>
+                  <Textarea value={newDecor.notes} onChange={(e) => setNewDecor({...newDecor, notes: e.target.value})} />
+                </div>
+                <Button type="submit" className="w-full bg-[#D4AF37] hover:bg-[#C9A961]">Añadir</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div className="space-y-3" data-testid="decor-list">
+          {decorDecisions.map((decor) => (
+            <Card key={decor.id} data-testid={`decor-item-${decor.id}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium">{decor.item_name}</h4>
+                    {decor.notes && (
+                      <p className="text-sm text-gray-600 mt-1">{decor.notes}</p>
+                    )}
+                  </div>
+                  <Badge variant={decor.status === 'ordered' ? 'default' : decor.status === 'chosen' ? 'secondary' : 'outline'}>
+                    {decor.status === 'ordered' ? 'Encargado' : decor.status === 'chosen' ? 'Elegido' : 'Por decidir'}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-600">Cargando...</p>
+      </div>
+    );
+  }
+
+  if (!event) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-red-600">Evento no encontrado</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#F5F1E8] via-white to-[#F5F1E8]">
+      {/* Header */}
+      <div className="bg-white shadow-elegant">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/dashboard')}
+              className="text-[#D4AF37]"
+              data-testid="event-back-button"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex-1">
+              <h1 className="text-3xl font-playfair font-bold text-[#D4AF37]" data-testid="event-title">
+                {event.title}
+              </h1>
+              <p className="text-gray-600 font-inter mt-1">
+                {new Date(event.date).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 gap-2 mb-8 bg-white p-2 rounded-lg shadow-elegant">
+            <TabsTrigger value="overview" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <Clock className="h-4 w-4 mr-2" />
+              Resumen
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <CheckCircle2 className="h-4 w-4 mr-2" />
+              Tareas
+            </TabsTrigger>
+            <TabsTrigger value="guests" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <Users className="h-4 w-4 mr-2" />
+              Invitados
+            </TabsTrigger>
+            <TabsTrigger value="budget" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <DollarSign className="h-4 w-4 mr-2" />
+              Presupuesto
+            </TabsTrigger>
+            <TabsTrigger value="suppliers" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <Package className="h-4 w-4 mr-2" />
+              Proveedores
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Notas
+            </TabsTrigger>
+            <TabsTrigger value="gallery" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <ImageIcon className="h-4 w-4 mr-2" />
+              Galería
+            </TabsTrigger>
+            <TabsTrigger value="decor" className="data-[state=active]:bg-[#D4AF37] data-[state=active]:text-white">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Decoración
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="bg-white rounded-lg shadow-elegant p-6">
+            <TabsContent value="overview" className="mt-0">
+              <div className="space-y-6">
+                <h2 className="text-2xl font-playfair font-bold">Resumen del Evento</h2>
+                {stats && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card className="border-[#E8DCC4]">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-playfair text-[#D4AF37]">Tareas</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <p className="text-sm">Total: <strong>{stats.tasks.total}</strong></p>
+                          <p className="text-sm">Completadas: <strong className="text-green-600">{stats.tasks.completed}</strong></p>
+                          <p className="text-sm">Progreso: <strong>{stats.tasks.completion_rate.toFixed(0)}%</strong></p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-[#E8DCC4]">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-playfair text-[#D4AF37]">Invitados</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <p className="text-sm">Total: <strong>{stats.guests.total}</strong></p>
+                          <p className="text-sm">Confirmados: <strong className="text-green-600">{stats.guests.confirmed}</strong></p>
+                          <p className="text-sm">Asistentes totales: <strong>{stats.guests.total_attendees}</strong></p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-[#E8DCC4]">
+                      <CardHeader>
+                        <CardTitle className="text-lg font-playfair text-[#D4AF37]">Presupuesto</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <p className="text-sm">Total: <strong>{stats.budget.total_estimated.toFixed(2)}€</strong></p>
+                          <p className="text-sm">Pagado: <strong className="text-green-600">{stats.budget.total_paid.toFixed(2)}€</strong></p>
+                          <p className="text-sm">Pendiente: <strong className="text-orange-600">{stats.budget.remaining.toFixed(2)}€</strong></p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="tasks" className="mt-0">
+              <TasksModule />
+            </TabsContent>
+
+            <TabsContent value="guests" className="mt-0">
+              <GuestsModule />
+            </TabsContent>
+
+            <TabsContent value="budget" className="mt-0">
+              <BudgetModule />
+            </TabsContent>
+
+            <TabsContent value="suppliers" className="mt-0">
+              <SuppliersModule />
+            </TabsContent>
+
+            <TabsContent value="notes" className="mt-0">
+              <NotesModule />
+            </TabsContent>
+
+            <TabsContent value="gallery" className="mt-0">
+              <GalleryModule />
+            </TabsContent>
+
+            <TabsContent value="decor" className="mt-0">
+              <DecorModule />
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+    </div>
+  );
+}

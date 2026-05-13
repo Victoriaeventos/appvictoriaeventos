@@ -2,7 +2,7 @@ services:
   - type: web
     name: victoriaeventos-api
     runtime: python
-    plan: starter  # Cambiar a 'free' si prefieres el plan gratuito (con cold starts)
+    plan: free  # Cambiar a 'free' si prefieres el plan gratuito (con cold starts)
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT

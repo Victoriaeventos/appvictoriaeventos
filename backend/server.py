@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 import jwt
 from passlib.context import CryptContext
 import base64
-from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
+from openai import AsyncOpenAI
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -493,6 +493,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido")
+
+# ============= HEALTH CHECK =============
+
+@api_router.get("/")
+async def api_root():
+    """Health check endpoint — usado por Render para verificar que el servicio está vivo."""
+    return {"status": "ok", "service": "victoriaeventos-api"}
+
 
 # ============= AUTH ROUTES =============
 
@@ -1343,34 +1351,40 @@ async def delete_note(note_id: str, current_user: dict = Depends(get_current_use
 @api_router.post("/gallery/generate", response_model=Gallery)
 async def generate_gallery_image(gallery_create: GalleryCreate, current_user: dict = Depends(get_current_user)):
     try:
-        api_key = os.environ.get('EMERGENT_LLM_KEY', '')
+        # Acepta OPENAI_API_KEY (estándar) o EMERGENT_LLM_KEY (compatibilidad con versión antigua)
+        api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY', '')
         if not api_key:
-            raise HTTPException(status_code=500, detail="API key no configurada")
-        
-        image_gen = OpenAIImageGeneration(api_key=api_key)
-        
-        images = await image_gen.generate_images(
-            prompt=gallery_create.generated_prompt,
+            raise HTTPException(status_code=500, detail="OPENAI_API_KEY no configurada")
+
+        openai_client = AsyncOpenAI(api_key=api_key)
+
+        response = await openai_client.images.generate(
             model="gpt-image-1",
-            number_of_images=1
+            prompt=gallery_create.generated_prompt,
+            n=1,
         )
-        
-        if not images or len(images) == 0:
+
+        if not response.data or len(response.data) == 0:
             raise HTTPException(status_code=500, detail="No se pudo generar la imagen")
-        
-        image_base64 = base64.b64encode(images[0]).decode('utf-8')
-        
+
+        # gpt-image-1 devuelve base64 directamente en b64_json
+        image_base64 = response.data[0].b64_json
+        if not image_base64:
+            raise HTTPException(status_code=500, detail="Respuesta de OpenAI sin datos de imagen")
+
         gallery_obj = Gallery(
             **gallery_create.model_dump(),
             image_base64=image_base64
         )
-        
+
         doc = gallery_obj.model_dump()
         doc['created_at'] = doc['created_at'].isoformat()
-        
+
         await db.galleries.insert_one(doc)
         return gallery_obj
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Error generating image: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error al generar imagen: {str(e)}")
